@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://42ntenterprise.github.io/multisolutions/sitemap.xml
