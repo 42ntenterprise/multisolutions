@@ -1,6 +1,6 @@
 const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
-  GOOGLE_SHEETS_URL: '',
+  GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbw2ubrpLp9K7LIOFsttr_aMOtVleO1rP3UP7WA8N_4AuTS73Rnj2aVb37ekiOcrd8WG/exec',
 };
 
 const NAV_SECTIONS = {
@@ -505,7 +505,7 @@ function sendToFormspree(formData) {
 
 function sendToGoogleSheets(payload = {}) {
   const endpoint = (CONFIG.GOOGLE_SHEETS_URL || '').trim();
-  if (!endpoint) return Promise.resolve();
+  if (!endpoint) return Promise.reject(new Error('Missing GOOGLE_SHEETS_URL configuration.'));
 
   const body = new URLSearchParams();
 
@@ -517,10 +517,7 @@ function sendToGoogleSheets(payload = {}) {
     method: 'POST',
     mode: 'no-cors',
     keepalive: true,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-    },
-    body: body.toString(),
+    body,
   });
 }
 
