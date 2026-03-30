@@ -1,6 +1,7 @@
 const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
   GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbw2ubrpLp9K7LIOFsttr_aMOtVleO1rP3UP7WA8N_4AuTS73Rnj2aVb37ekiOcrd8WG/exec',
+  USE_GOOGLE_SHEETS: true,
 };
 
 const NAV_SECTIONS = {
