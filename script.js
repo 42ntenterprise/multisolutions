@@ -1,6 +1,6 @@
 const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
-  GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbw2ubrpLp9K7LIOFsttr_aMOtVleO1rP3UP7WA8N_4AuTS73Rnj2aVb37ekiOcrd8WG/exec',
+  GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbypnjXsB-tTnvyWjz1ktKSeZiGN1XKBVr2nbCWoMNiX-Hhj3_hhKZg8GbpgpLu4Zmo0dA/exec',
 };
 
 const NAV_SECTIONS = {
@@ -936,6 +936,24 @@ function setupCharCounters() {
   });
 }
 
+function setupWhatsappFields() {
+  document.querySelectorAll('input[name="whatsapp"]').forEach(input => {
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('pattern', '[0-9]*');
+    input.setAttribute('autocomplete', 'tel-national');
+    input.setAttribute('maxlength', input.getAttribute('maxlength') || '15');
+
+    const sanitize = () => {
+      const digitsOnly = (input.value || '').replace(/\D/g, '');
+      if (input.value !== digitsOnly) input.value = digitsOnly;
+    };
+
+    input.addEventListener('input', sanitize);
+    input.addEventListener('blur', sanitize);
+    sanitize();
+  });
+}
+
 function setupUrgencyOptions() {
   document.querySelectorAll('.urgency-option').forEach(option => {
     const input = option.querySelector('input');
@@ -992,11 +1010,13 @@ function setupLeadForms() {
       const demoContext = (formData.get('demo_contexto') || '').trim();
       const leadScore = calcLeadScore(formData);
       const leadLabel = scoreLabel(leadScore);
+      const whatsapp = (formData.get('whatsapp') || '').replace(/\D/g, '');
 
       formData.set('empresa_detectada', detectedDomain);
       formData.set('nombre_cargo', [nombre, cargoRol].filter(Boolean).join(' — '));
       formData.set('lead_score', String(leadScore));
       formData.set('lead_label', leadLabel);
+      formData.set('whatsapp', whatsapp);
       formData.set('utm_source', leadSource.source);
       formData.set('utm_medium', leadSource.medium);
       formData.set('utm_campaign', leadSource.campaign);
@@ -1019,7 +1039,7 @@ function setupLeadForms() {
         empresa_detectada: detectedDomain,
         nombre_cargo: `${nombre}${cargoRol ? ' — ' + cargoRol : ''}`,
         email,
-        whatsapp: formData.get('whatsapp') || '',
+        whatsapp,
         industria: formData.get('industria') || '',
         tamano_empresa: formData.get('tamano_empresa') || '',
         necesidad: formData.get('necesidad') || '',
@@ -1069,7 +1089,7 @@ function setupLeadForms() {
           `Hola 42NT, soy ${nombre || 'un prospecto'}${cargoRol ? `, ${cargoRol}` : ''}${empresa ? ` de ${empresa}` : ''}. Necesito ayuda con: ${formData.get('necesidad') || 'evaluación inicial'}.`
         );
         showToast(
-          `No pudimos completar el envío. <a href="https://wa.me/56948827168?text=${message}" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> y seguimos de inmediato.`,
+          `No pudimos completar el envío. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> y seguimos de inmediato.`,
           'danger'
         );
       } finally {
@@ -1110,8 +1130,10 @@ function setupSupportForms() {
       const tipoSoporte = (formData.get('tipo_soporte') || '').trim();
       const urgencia = (formData.get('urgency') || '').trim();
       const origin = (formData.get('origen_cta') || '').trim();
+      const whatsapp = (formData.get('whatsapp') || '').replace(/\D/g, '');
 
       formData.set('record_type', 'support');
+      formData.set('whatsapp', whatsapp);
       formData.set('utm_source', leadSource.source);
       formData.set('utm_medium', leadSource.medium);
       formData.set('utm_campaign', leadSource.campaign);
@@ -1131,7 +1153,7 @@ function setupSupportForms() {
         nombre,
         empresa,
         email: formData.get('email') || '',
-        whatsapp: formData.get('whatsapp') || '',
+        whatsapp,
         cliente_status: formData.get('cliente_status') || '',
         proyecto: formData.get('proyecto') || '',
         tipo_soporte: tipoSoporte,
@@ -1168,7 +1190,7 @@ function setupSupportForms() {
           `Hola 42NT, necesito soporte para ${empresa || 'mi proyecto'}. Tipo: ${tipoSoporte || 'soporte general'}. Urgencia: ${urgencia || 'sin definir'}.`
         );
         showToast(
-          `No pudimos completar el envío. <a href="https://wa.me/56948827168?text=${message}" target="_blank" rel="noopener">Habla con soporte por WhatsApp</a>.`,
+          `No pudimos completar el envío. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Habla con soporte por WhatsApp</a>.`,
           'danger'
         );
       } finally {
@@ -1496,6 +1518,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupScrollTracking();
   setupSmoothScroll();
   setupCharCounters();
+  setupWhatsappFields();
   setupOptionalToggles();
   setupUrgencyOptions();
   setupLeadTriggers();
