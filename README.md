@@ -31,13 +31,10 @@ El código actual muestra una versión funcional y navegable del sitio, con cont
 - SEO base con `robots.txt` y `sitemap.xml`.
 - Formularios de lead y soporte con integraciones client-side.
 
-### También presente en el repo, pero fuera del flujo principal
+### Limpieza reciente del repositorio
 
-- `bi-landing/`: variante/prototipo heredado de “DataBI Pro”.
-- `preview.html`: vista previa interactiva duplicada del material de prototipo.
-- `uf-chart.html` y `grafico_uf_comparativo.py`: experimento/activo analítico auxiliar.
-- `images/index_soporte_modificado.html`: iteración o respaldo intermedio de la página de soporte.
-- `Análisis Landing Saturada.xlsx`: insumo de trabajo documental/comercial.
+- Se retiraron prototipos heredados, respaldos intermedios y activos huérfanos que no participaban del sitio activo.
+- La raíz del proyecto ahora refleja solo la versión productiva, la documentación y la configuración de publicación.
 
 ## Stack Tecnológico Detectado
 
@@ -49,7 +46,7 @@ El código actual muestra una versión funcional y navegable del sitio, con cont
 | Iconografía | Bootstrap Icons (CDN) | Iconos UI |
 | Tipografía | Sora + DM Sans (Google Fonts) | Headings y body copy |
 | Animaciones | AOS (CDN) | Entradas y scroll reveals |
-| Visualización | Chart.js (CDN) | Dashboard demo y gráfico UF |
+| Visualización | Chart.js (CDN) | Dashboard demo |
 | Integraciones | Formspree + Google Apps Script | Envío de formularios |
 | Publicación | Sitio estático sin build detectado | Hosting compatible con GitHub Pages |
 
@@ -57,7 +54,11 @@ El código actual muestra una versión funcional y navegable del sitio, con cont
 
 ```text
 .
+|-- 404.html
+|-- _headers
 |-- index.html
+|-- netlify.toml
+|-- README.md
 |-- style.css
 |-- script.js
 |-- robots.txt
@@ -74,16 +75,6 @@ El código actual muestra una versión funcional y navegable del sitio, con cont
 |   `-- index.html
 |-- images/
 |   `-- activos visuales y logos
-|-- bi-landing/
-|   |-- index.html
-|   |-- style.css
-|   |-- script.js
-|   |-- preview.html
-|   `-- images/
-|-- preview.html
-|-- uf-chart.html
-|-- grafico_uf_comparativo.py
-|-- Análisis Landing Saturada.xlsx
 `-- DOCUMENTATION/
 ```
 
@@ -150,6 +141,6 @@ Abrir `index.html`, que redirige a `inicio/`.
 
 - `style.css` y `script.js` son archivos críticos y de alto acoplamiento.
 - Los formularios comerciales y de soporte comparten parte importante de la lógica de envío y tracking.
-- La versión actualmente visible del sitio no es `bi-landing/`; esa carpeta debe tratarse como material alternativo hasta validar su destino.
+- El repositorio ya fue depurado de prototipos heredados y respaldos sueltos; conviene mantener cualquier material exploratorio futuro fuera de la raíz productiva.
 - Cambios en URLs, teléfonos, perfiles públicos o endpoints deben revisarse en todas las páginas, formularios y metadatos.
 - Consultar `DOCUMENTATION/` antes de modificar arquitectura, contenidos, SEO o flujos de conversión.

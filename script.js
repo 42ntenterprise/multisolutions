@@ -1,7 +1,6 @@
 const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
-  GOOGLE_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbw2ubrpLp9K7LIOFsttr_aMOtVleO1rP3UP7WA8N_4AuTS73Rnj2aVb37ekiOcrd8WG/exec',
-  USE_GOOGLE_SHEETS: true,
+  GOOGLE_SHEETS_URL: '',
 };
 
 const NAV_SECTIONS = {
@@ -110,7 +109,7 @@ const NAV_SECTIONS = {
     {
       id: 'precios',
       title: 'Precios',
-      copy: 'Paquetes y punto de partida visible.',
+      copy: 'Servicios y punto de partida visible.',
     },
     {
       id: 'faq',
@@ -620,13 +619,24 @@ function sendToFormspree(formData) {
   });
 }
 
-function sendToGoogleSheets(payload) {
-  if (!CONFIG.USE_GOOGLE_SHEETS || !CONFIG.GOOGLE_SCRIPT_URL) return Promise.resolve();
+function sendToGoogleSheets(payload = {}) {
+  const endpoint = (CONFIG.GOOGLE_SHEETS_URL || '').trim();
+  if (!endpoint) return Promise.resolve();
 
-  const params = new URLSearchParams(payload);
-  return fetch(CONFIG.GOOGLE_SCRIPT_URL, {
+  const body = new URLSearchParams();
+
+  Object.entries(payload).forEach(([key, value]) => {
+    body.append(key, value == null ? '' : String(value));
+  });
+
+  return fetch(endpoint, {
     method: 'POST',
-    body: params,
+    mode: 'no-cors',
+    keepalive: true,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+    },
+    body: body.toString(),
   });
 }
 
@@ -974,8 +984,6 @@ function setupLeadForms() {
 
       const formData = new FormData(form);
       const leadSource = getLeadSource();
-      const score = calcLeadScore(formData);
-      const label = scoreLabel(score);
       const nombre = (formData.get('nombre') || '').trim();
       const cargoRol = (formData.get('cargo_rol') || '').trim();
       const empresa = (formData.get('empresa') || '').trim();
@@ -986,7 +994,6 @@ function setupLeadForms() {
       const caseInterest = (formData.get('caso_interes') || '').trim();
       const demoContext = (formData.get('demo_contexto') || '').trim();
 
-      formData.set('lead_score', `${score} — ${label}`);
       formData.set('empresa_detectada', detectedDomain);
       formData.set('utm_source', leadSource.source);
       formData.set('utm_medium', leadSource.medium);
@@ -996,17 +1003,19 @@ function setupLeadForms() {
       formData.set('pagina', window.location.pathname);
       formData.set(
         '_subject',
-        `Lead 42NT — ${sanitizeForSubject(formData.get('necesidad')) || 'sin necesidad'} — ${sanitizeForSubject(cargoRol) || 'sin rol'} — ${sanitizeForSubject(empresa) || 'sin empresa'} — Score ${score} (${label})`
+        `Lead 42NT - ${sanitizeForSubject(formData.get('necesidad')) || 'sin necesidad'} - ${sanitizeForSubject(cargoRol) || 'sin rol'} - ${sanitizeForSubject(empresa) || 'sin empresa'}`
       );
 
       const sheetsPayload = {
         record_type: 'lead',
+        sheet_name: 'Solicitud 42NT',
         timestamp,
         pagina: window.location.pathname,
         nombre,
         cargo_rol: cargoRol,
         empresa,
         empresa_detectada: detectedDomain,
+        nombre_cargo: `${nombre}${cargoRol ? ' — ' + cargoRol : ''}`,
         email,
         whatsapp: formData.get('whatsapp') || '',
         industria: formData.get('industria') || '',
@@ -1014,15 +1023,13 @@ function setupLeadForms() {
         necesidad: formData.get('necesidad') || '',
         fuente_datos: formData.get('fuente_datos') || '',
         numero_fuentes: formData.get('numero_fuentes') || '',
-        urgency: formData.get('urgency') || '',
+        urgencia: formData.get('urgency') || '',
         descripcion: formData.get('descripcion') || '',
         origen_cta: origin,
         caso_interes: caseInterest,
         demo_contexto: demoContext,
         form_inicio_ts: formData.get('form_inicio_ts') || '',
         form_inicio_origen: formData.get('form_inicio_origen') || '',
-        lead_score: score,
-        lead_label: label,
         utm_source: leadSource.source,
         utm_medium: leadSource.medium,
         utm_campaign: leadSource.campaign,
@@ -1114,6 +1121,7 @@ function setupSupportForms() {
 
       const sheetsPayload = {
         record_type: 'support',
+        sheet_name: 'Soporte 42NT',
         timestamp,
         pagina: window.location.pathname,
         nombre,
@@ -1251,7 +1259,7 @@ function setupPackageFocus() {
 
   const currentNeed = getLeadContextFromQuery().need;
   const packageMap = {
-    'Diagnóstico de Datos y Reportes': 'paquete-diagnostico',
+    'Diagnóstico de Datos': 'paquete-diagnostico',
     'Dashboard Gerencial': 'paquete-dashboard',
     'Integración de Datos': 'paquete-integracion',
     'Pronóstico de Negocio': 'paquete-pronostico',

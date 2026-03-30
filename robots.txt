@@ -1,8 +1,5 @@
 User-agent: *
 Allow: /
 
-# Bloquear archivos auxiliares
-Disallow: /preview.html
-
 # Sitemap
-Sitemap: https://42ntenterprise.github.io/Solutions/sitemap.xml
+Sitemap: https://42ntenterprise.github.io/multisolutions/sitemap.xml
