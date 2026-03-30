@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>SharePoint</title>
+  <defs>
+    <linearGradient id="sp-a" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26c0ad"/>
+      <stop offset="1" stop-color="#03787c"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#e8f8f7"/>
+  <circle cx="24" cy="32" r="14" fill="#0f9da4"/>
+  <circle cx="39" cy="22" r="9" fill="#5fd3c7"/>
+  <circle cx="42" cy="42" r="10" fill="#20b6ab"/>
+  <path d="M30.6 24.6c-1.3-1.3-3.2-2.1-5.3-2.1-4 0-6.7 2.2-6.7 5.3 0 3.4 2.7 4.5 5.7 5.1 2.6.5 3.4.9 3.4 2 0 1.1-1.1 1.8-2.9 1.8-2 0-3.7-.8-5.1-2.2l-2.7 3c1.9 1.9 4.7 3 7.8 3 4.6 0 7.7-2.2 7.7-5.7 0-3.2-2.1-4.5-5.8-5.3-2.4-.5-3.3-.8-3.3-1.9 0-1 1-1.6 2.6-1.6 1.7 0 3.1.6 4.5 1.7l2.1-3.1Z" fill="#fff"/>
+</svg>
