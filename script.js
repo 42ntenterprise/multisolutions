@@ -1,7 +1,6 @@
 const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
   GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbw2ubrpLp9K7LIOFsttr_aMOtVleO1rP3UP7WA8N_4AuTS73Rnj2aVb37ekiOcrd8WG/exec',
-  USE_GOOGLE_SHEETS: true,
 };
 
 const NAV_SECTIONS = {
@@ -991,8 +990,13 @@ function setupLeadForms() {
       const origin = (formData.get('origen_cta') || '').trim();
       const caseInterest = (formData.get('caso_interes') || '').trim();
       const demoContext = (formData.get('demo_contexto') || '').trim();
+      const leadScore = calcLeadScore(formData);
+      const leadLabel = scoreLabel(leadScore);
 
       formData.set('empresa_detectada', detectedDomain);
+      formData.set('nombre_cargo', [nombre, cargoRol].filter(Boolean).join(' — '));
+      formData.set('lead_score', String(leadScore));
+      formData.set('lead_label', leadLabel);
       formData.set('utm_source', leadSource.source);
       formData.set('utm_medium', leadSource.medium);
       formData.set('utm_campaign', leadSource.campaign);
@@ -1028,6 +1032,8 @@ function setupLeadForms() {
         demo_contexto: demoContext,
         form_inicio_ts: formData.get('form_inicio_ts') || '',
         form_inicio_origen: formData.get('form_inicio_origen') || '',
+        lead_score: leadScore,
+        lead_label: leadLabel,
         utm_source: leadSource.source,
         utm_medium: leadSource.medium,
         utm_campaign: leadSource.campaign,
