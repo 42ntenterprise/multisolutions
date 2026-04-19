@@ -1,7 +1,50 @@
+﻿/* ============================================================
+   Shared configuration
+   ============================================================ */
+
 const CONFIG = {
-  FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
-  GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbypnjXsB-tTnvyWjz1ktKSeZiGN1XKBVr2nbCWoMNiX-Hhj3_hhKZg8GbpgpLu4Zmo0dA/exec',
+  endpoints: {
+    formspreeUrl: 'https://formspree.io/f/xdawnkgn',
+  },
+  contact: {
+    whatsappDigits: '56932516492',
+    whatsappUrl: 'https://wa.me/56932516492',
+  },
+  forms: {
+    minSubmitAgeMs: 1500,
+    hiddenStartedAtName: 'form_started_epoch_ms',
+    honeypotName: 'website',
+    fieldLimits: {
+      nombre: { maxlength: 120, minlength: 2 },
+      empresa: { maxlength: 160, minlength: 2 },
+      email: { maxlength: 254 },
+      proyecto: { maxlength: 160 },
+      descripcion: { maxlength: 500, minlength: 20 },
+      origen_cta: { maxlength: 120 },
+      caso_interes: { maxlength: 120 },
+      demo_contexto: { maxlength: 240 },
+      form_inicio_origen: { maxlength: 120 },
+    },
+  },
+  routes: {
+    inicio: '/inicio/',
+    quienesSomos: '/quienes-somos/',
+    comoTrabajamos: '/como-trabajamos/',
+    nuestrosServicios: '/nuestros-servicios/',
+    soporte: '/soporte/',
+  },
+  theme: {
+    storageKey: '42nt-theme',
+    light: 'light',
+    dark: 'dark',
+    metaColors: {
+      light: '#f7f7f4',
+      dark: '#121417',
+    },
+  },
 };
+
+let executiveDemoChart = null;
 
 const NAV_SECTIONS = {
   inicio: [
@@ -161,6 +204,330 @@ const NAV_SECTIONS = {
   ],
 };
 
+/* ============================================================
+   Helpers / utilities
+   ============================================================ */
+
+function focusSafely(element, options = { preventScroll: true }) {
+  if (!element) return;
+
+  try {
+    element.focus(options);
+  } catch (error) {
+    element.focus();
+  }
+}
+
+function getCssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hexToRgb(hex) {
+  const sanitized = (hex || '').replace('#', '').trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(sanitized)) return null;
+
+  return {
+    r: parseInt(sanitized.slice(0, 2), 16),
+    g: parseInt(sanitized.slice(2, 4), 16),
+    b: parseInt(sanitized.slice(4, 6), 16),
+  };
+}
+
+function rgbaFromHex(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+function buildWhatsappUrl(message = '') {
+  if (!message) return CONFIG.contact.whatsappUrl;
+  return `${CONFIG.contact.whatsappUrl}?text=${encodeURIComponent(message)}`;
+}
+
+function sanitizeContextValue(value, maxLength = 240) {
+  return String(value || '')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function applyFieldConstraints(scope = document) {
+  Object.entries(CONFIG.forms.fieldLimits).forEach(([name, rules]) => {
+    scope.querySelectorAll(`[name="${name}"]`).forEach(field => {
+      if (rules.maxlength && !field.hasAttribute('maxlength')) {
+        field.setAttribute('maxlength', String(rules.maxlength));
+      }
+
+      if (rules.minlength && !field.hasAttribute('minlength') && field.type !== 'hidden') {
+        field.setAttribute('minlength', String(rules.minlength));
+      }
+    });
+  });
+}
+
+function normalizeFormFields(form) {
+  form.querySelectorAll('input, select, textarea').forEach(field => {
+    if (typeof field.value !== 'string') return;
+    if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
+    field.value = field.value.trim();
+  });
+}
+
+function createHiddenField(form, name, value = '') {
+  const input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = name;
+  input.value = value;
+  form.prepend(input);
+  return input;
+}
+
+function ensureFormSecurityFields(form) {
+  if (!form) return;
+
+  let startedAt = form.querySelector(`[name="${CONFIG.forms.hiddenStartedAtName}"]`);
+  if (!startedAt) {
+    startedAt = createHiddenField(form, CONFIG.forms.hiddenStartedAtName, String(Date.now()));
+  } else if (!startedAt.value) {
+    startedAt.value = String(Date.now());
+  }
+
+  if (!form.querySelector('[data-honeypot-field]')) {
+    const wrapper = document.createElement('div');
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+
+    wrapper.setAttribute('data-honeypot-field', 'true');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '-10000px';
+    wrapper.style.width = '1px';
+    wrapper.style.height = '1px';
+    wrapper.style.overflow = 'hidden';
+
+    label.textContent = 'No completar';
+    input.type = 'text';
+    input.name = CONFIG.forms.honeypotName;
+    input.tabIndex = -1;
+    input.autocomplete = 'off';
+
+    wrapper.append(label, input);
+    form.appendChild(wrapper);
+  }
+}
+
+function getFormGuardMessage(form) {
+  ensureFormSecurityFields(form);
+
+  const honeypot = form.querySelector(`[name="${CONFIG.forms.honeypotName}"]`);
+  if (honeypot && honeypot.value.trim()) {
+    return 'No pudimos validar el formulario. Recarga la página y vuelve a intentarlo.';
+  }
+
+  const startedAt = Number(form.querySelector(`[name="${CONFIG.forms.hiddenStartedAtName}"]`)?.value || 0);
+  if (startedAt && Date.now() - startedAt < CONFIG.forms.minSubmitAgeMs) {
+    return 'Espera un segundo para completar la verificación y vuelve a enviar el formulario.';
+  }
+
+  return '';
+}
+
+/* ============================================================
+   Theme handling
+   ============================================================ */
+
+function ensureThemeMetaTag() {
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) return meta;
+
+  meta = document.createElement('meta');
+  meta.setAttribute('name', 'theme-color');
+  document.head.appendChild(meta);
+  return meta;
+}
+
+function getStoredTheme() {
+  try {
+    const theme = window.localStorage.getItem(CONFIG.theme.storageKey);
+    return theme === CONFIG.theme.dark || theme === CONFIG.theme.light ? theme : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? CONFIG.theme.dark
+    : CONFIG.theme.light;
+}
+
+function getActiveTheme() {
+  return document.documentElement.getAttribute('data-theme') === CONFIG.theme.dark
+    ? CONFIG.theme.dark
+    : CONFIG.theme.light;
+}
+
+function resolveThemePreference() {
+  return getStoredTheme() || document.documentElement.getAttribute('data-theme') || getSystemTheme();
+}
+
+function syncThemeColorMeta(theme) {
+  const meta = ensureThemeMetaTag();
+  meta.setAttribute('content', CONFIG.theme.metaColors[theme] || CONFIG.theme.metaColors.light);
+}
+
+function decodeHtmlEntities(value = '') {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(value, 'text/html');
+  return doc.documentElement.textContent || '';
+}
+
+function createThemeToggleItem() {
+  const item = document.createElement('li');
+  item.className = 'nav-item nav-item-theme';
+
+  const button = document.createElement('button');
+  button.className = 'theme-toggle';
+  button.type = 'button';
+  button.dataset.themeToggle = '';
+  button.setAttribute('aria-pressed', 'false');
+
+  const iconWrapper = document.createElement('span');
+  iconWrapper.className = 'theme-toggle-icon';
+  iconWrapper.setAttribute('aria-hidden', 'true');
+
+  const icon = document.createElement('i');
+  icon.className = 'bi bi-moon-stars-fill';
+  iconWrapper.appendChild(icon);
+
+  const copyWrapper = document.createElement('span');
+  copyWrapper.className = 'theme-toggle-copy';
+
+  const label = document.createElement('span');
+  label.className = 'theme-toggle-label';
+  label.textContent = 'Tema';
+
+  const state = document.createElement('span');
+  state.className = 'theme-toggle-state';
+  state.textContent = 'Claro';
+
+  copyWrapper.append(label, state);
+  button.append(iconWrapper, copyWrapper);
+  item.appendChild(button);
+
+  return item;
+}
+
+function createNavDropdownLink(href, section) {
+  const link = document.createElement('a');
+  link.className = 'nav-dropdown-link';
+  link.href = href;
+
+  const title = document.createElement('span');
+  title.className = 'nav-dropdown-link-title';
+  title.textContent = decodeHtmlEntities(section.title);
+
+  const copy = document.createElement('span');
+  copy.className = 'nav-dropdown-link-copy';
+  copy.textContent = decodeHtmlEntities(section.copy);
+
+  link.append(title, copy);
+  return link;
+}
+
+function ensureThemeToggle() {
+  document.querySelectorAll('#mainNav .navbar-nav').forEach(navList => {
+    if (navList.querySelector('.nav-item-theme')) return;
+
+    const toggleItem = createThemeToggleItem();
+    const languageItem = navList.querySelector('.nav-item-language');
+    if (languageItem) {
+      languageItem.before(toggleItem);
+      return;
+    }
+
+    navList.appendChild(toggleItem);
+  });
+}
+
+function updateThemeToggleUi(theme) {
+  const isDark = theme === CONFIG.theme.dark;
+
+  document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+    const icon = button.querySelector('.theme-toggle-icon i');
+    const state = button.querySelector('.theme-toggle-state');
+
+    button.setAttribute('aria-pressed', String(isDark));
+    button.setAttribute('aria-label', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+    button.setAttribute('title', isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+
+    if (state) state.textContent = isDark ? 'Oscuro' : 'Claro';
+
+    if (icon) {
+      icon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    }
+  });
+}
+
+function applyTheme(theme, { persist = false, emit = true } = {}) {
+  const resolvedTheme = theme === CONFIG.theme.dark ? CONFIG.theme.dark : CONFIG.theme.light;
+
+  document.documentElement.setAttribute('data-theme', resolvedTheme);
+  document.documentElement.style.colorScheme = resolvedTheme;
+  syncThemeColorMeta(resolvedTheme);
+  updateThemeToggleUi(resolvedTheme);
+
+  if (persist) {
+    try {
+      window.localStorage.setItem(CONFIG.theme.storageKey, resolvedTheme);
+    } catch (error) {
+      console.warn('No se pudo guardar la preferencia de tema.', error);
+    }
+  }
+
+  if (emit) {
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: resolvedTheme } }));
+  }
+}
+
+function toggleTheme() {
+  const nextTheme = getActiveTheme() === CONFIG.theme.dark ? CONFIG.theme.light : CONFIG.theme.dark;
+  applyTheme(nextTheme, { persist: true });
+}
+
+function bindThemeToggle() {
+  document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+    if (button.dataset.themeToggleBound === 'true') return;
+    button.dataset.themeToggleBound = 'true';
+
+    button.addEventListener('click', () => toggleTheme());
+  });
+}
+
+function initTheme() {
+  ensureThemeMetaTag();
+  ensureThemeToggle();
+  applyTheme(resolveThemePreference(), { emit: false });
+  bindThemeToggle();
+
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const syncWithSystem = event => {
+    if (getStoredTheme()) return;
+    applyTheme(event.matches ? CONFIG.theme.dark : CONFIG.theme.light, { persist: false });
+  };
+
+  if (typeof mediaQuery.addEventListener === 'function') {
+    mediaQuery.addEventListener('change', syncWithSystem);
+  } else if (typeof mediaQuery.addListener === 'function') {
+    mediaQuery.addListener(syncWithSystem);
+  }
+}
+
+/* ============================================================
+   Navigation
+   ============================================================ */
+
 function normalizeNavPath(pathname = '') {
   return pathname.replace(/index\.html$/, '').replace(/\/+$/, '');
 }
@@ -200,18 +567,15 @@ function syncGlobalNav() {
 
     menu.setAttribute('role', 'menu');
     if (menuLabel) {
-      menu.setAttribute('aria-label', `Submen&uacute; de ${menuLabel}`);
+      menu.setAttribute('aria-label', `Submenú de ${menuLabel}`);
     }
 
-    menu.innerHTML = sections.map(section => {
+    const links = sections.map(section => {
       const href = buildNavSectionHref(baseHref, section.id, currentSlug, targetSlug);
-      return `
-        <a class="nav-dropdown-link" href="${href}">
-          <span class="nav-dropdown-link-title">${section.title}</span>
-          <span class="nav-dropdown-link-copy">${section.copy}</span>
-        </a>
-      `;
-    }).join('');
+      return createNavDropdownLink(href, section);
+    });
+
+    menu.replaceChildren(...links);
   });
 }
 
@@ -479,6 +843,10 @@ function initParallax() {
   updateParallax();
 }
 
+/* ============================================================
+   Tracking / attribution
+   ============================================================ */
+
 function getLeadSource() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -519,12 +887,69 @@ function ensureToastStack() {
   return stack;
 }
 
-function showToast(message, type = 'success') {
+function getToastPresentation(type = 'success') {
+  const mappedType = type === 'error' ? 'danger' : type;
+
+  if (mappedType === 'danger') {
+    return {
+      mappedType,
+      title: 'No se pudo completar',
+      icon: 'bi-exclamation-triangle-fill',
+      role: 'alert',
+      live: 'assertive',
+    };
+  }
+
+  return {
+    mappedType,
+    title: 'Listo',
+    icon: 'bi-check-circle-fill',
+    role: 'status',
+    live: 'polite',
+  };
+}
+
+function showToast(message, type = 'success', options = {}) {
   const stack = ensureToastStack();
   const toast = document.createElement('div');
-  const mappedType = type === 'error' ? 'danger' : type;
-  toast.className = `site-toast site-toast--${mappedType}`;
-  toast.innerHTML = message;
+  const presentation = getToastPresentation(type);
+  const iconWrap = document.createElement('span');
+  const icon = document.createElement('i');
+  const copy = document.createElement('div');
+  const title = document.createElement('strong');
+  const messageWrap = document.createElement('div');
+
+  toast.className = `site-toast site-toast--${presentation.mappedType}`;
+  toast.setAttribute('role', presentation.role);
+  toast.setAttribute('aria-live', presentation.live);
+
+  iconWrap.className = 'site-toast__icon';
+  iconWrap.setAttribute('aria-hidden', 'true');
+  icon.className = `bi ${presentation.icon}`;
+  iconWrap.appendChild(icon);
+
+  copy.className = 'site-toast__copy';
+  title.className = 'site-toast__title';
+  title.textContent = presentation.title;
+  messageWrap.className = 'site-toast__message';
+  messageWrap.textContent = message;
+
+  if (options.action?.href && options.action?.label) {
+    messageWrap.appendChild(document.createTextNode(' '));
+    const action = document.createElement('a');
+    action.href = options.action.href;
+    action.textContent = options.action.label;
+    if (options.action.target) action.target = options.action.target;
+    if (options.action.rel) action.rel = options.action.rel;
+    messageWrap.appendChild(action);
+  }
+
+  if (options.suffix) {
+    messageWrap.appendChild(document.createTextNode(options.suffix));
+  }
+
+  copy.append(title, messageWrap);
+  toast.append(iconWrap, copy);
   stack.appendChild(toast);
 
   requestAnimationFrame(() => toast.classList.add('is-visible'));
@@ -599,6 +1024,10 @@ function calcLeadScore(formData) {
   return Math.min(score, 100);
 }
 
+/* ============================================================
+   Forms
+   ============================================================ */
+
 function scoreLabel(score) {
   if (score >= 70) return 'CALIENTE';
   if (score >= 40) return 'TIBIO';
@@ -606,7 +1035,7 @@ function scoreLabel(score) {
 }
 
 function sendToFormspree(formData) {
-  return fetch(CONFIG.FORMSPREE_URL, {
+  return fetch(CONFIG.endpoints.formspreeUrl, {
     method: 'POST',
     body: formData,
     headers: { Accept: 'application/json' },
@@ -616,24 +1045,6 @@ function sendToFormspree(formData) {
       throw new Error(error.error || `Formspree error ${response.status}`);
     }
     return response.json();
-  });
-}
-
-function sendToGoogleSheets(payload = {}) {
-  const endpoint = (CONFIG.GOOGLE_SHEETS_URL || '').trim();
-  if (!endpoint) return Promise.reject(new Error('Missing GOOGLE_SHEETS_URL configuration.'));
-
-  const body = new URLSearchParams();
-
-  Object.entries(payload).forEach(([key, value]) => {
-    body.append(key, value == null ? '' : String(value));
-  });
-
-  return fetch(endpoint, {
-    method: 'POST',
-    mode: 'no-cors',
-    keepalive: true,
-    body,
   });
 }
 
@@ -652,10 +1063,18 @@ function setButtonLoading(button, isLoading) {
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     button.setAttribute('aria-disabled', 'true');
-    button.dataset.originalHtml = button.innerHTML;
+    if (!button.__originalContentNodes) {
+      button.__originalContentNodes = Array.from(button.childNodes).map(node => node.cloneNode(true));
+    }
     button.dataset.originalAriaLabel = button.getAttribute('aria-label') || '';
     button.setAttribute('aria-label', 'Enviando formulario');
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-label="Enviando formulario"></span>Enviando...';
+
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner-border spinner-border-sm me-2';
+    spinner.setAttribute('role', 'status');
+    spinner.setAttribute('aria-label', 'Enviando formulario');
+
+    button.replaceChildren(spinner, document.createTextNode('Enviando...'));
   } else {
     button.disabled = false;
     button.setAttribute('aria-busy', 'false');
@@ -665,11 +1084,105 @@ function setButtonLoading(button, isLoading) {
     } else {
       button.removeAttribute('aria-label');
     }
-    button.innerHTML = button.dataset.originalHtml || button.innerHTML;
+
+    if (button.__originalContentNodes) {
+      button.replaceChildren(...button.__originalContentNodes.map(node => node.cloneNode(true)));
+    }
   }
 }
 
+function createDemoKpiCard(item) {
+  const card = document.createElement('div');
+  card.className = 'demo-kpi-card';
+
+  const label = document.createElement('span');
+  label.className = 'demo-kpi-label';
+  label.textContent = item.label;
+
+  const value = document.createElement('strong');
+  value.className = 'demo-kpi-value';
+  value.textContent = item.value;
+
+  const meta = document.createElement('span');
+  meta.className = `demo-kpi-meta ${item.tone}`;
+  meta.textContent = item.meta;
+
+  card.append(label, value, meta);
+  return card;
+}
+
+function ensureFieldIdsAndLabels(scope = document) {
+  let fieldCounter = 0;
+
+  scope.querySelectorAll('label.form-label').forEach(label => {
+    const field = label.parentElement?.querySelector('input, select, textarea');
+    if (!field) return;
+
+    if (!field.id) {
+      const slug = (field.name || 'field').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'field';
+      field.id = `${slug}-${++fieldCounter}`;
+    }
+
+    if (!label.htmlFor) {
+      label.htmlFor = field.id;
+    }
+  });
+}
+
+function syncAccordionAccessibility(scope = document) {
+  scope.querySelectorAll('.accordion-button[data-bs-target]').forEach((button, index) => {
+    const targetSelector = button.getAttribute('data-bs-target');
+    if (!targetSelector) return;
+
+    const panel = document.querySelector(targetSelector);
+    if (!panel) return;
+
+    if (!button.id) button.id = `accordion-button-${index + 1}`;
+    if (!panel.id) panel.id = targetSelector.replace('#', '') || `accordion-panel-${index + 1}`;
+
+    button.setAttribute('aria-controls', panel.id);
+    button.setAttribute('aria-expanded', String(panel.classList.contains('show')));
+    panel.setAttribute('aria-labelledby', button.id);
+
+    if (panel.dataset.accordionA11yBound === 'true') return;
+    panel.dataset.accordionA11yBound = 'true';
+
+    panel.addEventListener('show.bs.collapse', () => button.setAttribute('aria-expanded', 'true'));
+    panel.addEventListener('hide.bs.collapse', () => button.setAttribute('aria-expanded', 'false'));
+  });
+}
+
+function decorateFormSuccessBanners(scope = document) {
+  scope.querySelectorAll('[data-form-success]').forEach((banner, index) => {
+    if (!banner.id) banner.id = `form-success-${index + 1}`;
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+    banner.setAttribute('aria-hidden', String(banner.hasAttribute('hidden')));
+    if (!banner.hasAttribute('tabindex')) banner.tabIndex = -1;
+  });
+}
+
+function enhanceSharedAccessibility() {
+  ensureFieldIdsAndLabels();
+  syncAccordionAccessibility();
+  decorateFormSuccessBanners();
+}
+
+function revealSuccessState(form) {
+  if (!form) return;
+
+  form.hidden = true;
+  const successBanner = form.parentElement?.querySelector('[data-form-success]');
+  if (!successBanner) return;
+
+  successBanner.removeAttribute('hidden');
+  successBanner.setAttribute('aria-hidden', 'false');
+  focusSafely(successBanner);
+}
+
 function markFormStarted(form, sourceOverride = '') {
+  ensureFormSecurityFields(form);
+
   const startedAt = form.querySelector('[name="form_inicio_ts"]');
   const startedSource = form.querySelector('[name="form_inicio_origen"]');
   const originField = form.querySelector('[name="origen_cta"]');
@@ -693,24 +1206,24 @@ function markFormStarted(form, sourceOverride = '') {
 }
 
 function validateForm(form) {
+  normalizeFormFields(form);
+
   let isValid = true;
   let firstInvalid = null;
 
-  form.querySelectorAll('[required]').forEach(field => {
-    const value = typeof field.value === 'string' ? field.value.trim() : field.value;
-    const valid = Boolean(value);
+  form.querySelectorAll('input, select, textarea').forEach(field => {
+    if (!field.willValidate) return;
+
+    const valid = field.checkValidity();
     field.classList.toggle('is-invalid', !valid);
+    field.setAttribute('aria-invalid', String(!valid));
     if (!valid && !firstInvalid) firstInvalid = field;
     if (!valid) isValid = false;
   });
 
   if (firstInvalid) {
     firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    try {
-      firstInvalid.focus({ preventScroll: true });
-    } catch (error) {
-      firstInvalid.focus();
-    }
+    focusSafely(firstInvalid);
   }
 
   return isValid;
@@ -718,8 +1231,14 @@ function validateForm(form) {
 
 function clearInvalidOnInput(form) {
   form.querySelectorAll('.form-control, .form-select, .form-textarea').forEach(field => {
-    field.addEventListener('input', () => field.classList.remove('is-invalid'));
-    field.addEventListener('change', () => field.classList.remove('is-invalid'));
+    field.addEventListener('input', () => {
+      field.classList.remove('is-invalid');
+      field.setAttribute('aria-invalid', 'false');
+    });
+    field.addEventListener('change', () => {
+      field.classList.remove('is-invalid');
+      field.setAttribute('aria-invalid', 'false');
+    });
   });
 }
 
@@ -756,6 +1275,15 @@ function getLeadContextFromQuery() {
 function applyLeadContext(form, context) {
   if (!form || !context) return;
 
+  const safeContext = {
+    need: sanitizeContextValue(context.need, 120),
+    industry: sanitizeContextValue(context.industry, 80),
+    caseName: sanitizeContextValue(context.caseName, 120),
+    context: sanitizeContextValue(context.context, 240),
+    origin: sanitizeContextValue(context.origin, 120),
+    title: sanitizeContextValue(context.title, 120),
+  };
+
   const needField = form.querySelector('[name="necesidad"]');
   const industryField = form.querySelector('[name="industria"]');
   const originField = form.querySelector('[name="origen_cta"]');
@@ -765,29 +1293,29 @@ function applyLeadContext(form, context) {
   const bannerTitle = banner?.querySelector('[data-form-context-title]');
   const bannerCopy = banner?.querySelector('[data-form-context-copy]');
 
-  if (needField && context.need) {
-    const option = [...needField.options].find(item => item.value === context.need);
-    if (option) needField.value = context.need;
+  if (needField && safeContext.need) {
+    const option = [...needField.options].find(item => item.value === safeContext.need);
+    if (option) needField.value = safeContext.need;
   }
 
-  if (industryField && context.industry) {
-    const option = [...industryField.options].find(item => item.value === context.industry);
-    if (option) industryField.value = context.industry;
+  if (industryField && safeContext.industry) {
+    const option = [...industryField.options].find(item => item.value === safeContext.industry);
+    if (option) industryField.value = safeContext.industry;
   }
 
-  if (originField && context.origin) originField.value = context.origin;
-  if (caseField && context.caseName) caseField.value = context.caseName;
-  if (contextField && context.context) contextField.value = context.context;
+  if (originField && safeContext.origin) originField.value = safeContext.origin;
+  if (caseField && safeContext.caseName) caseField.value = safeContext.caseName;
+  if (contextField && safeContext.context) contextField.value = safeContext.context;
 
-  if (banner && (context.caseName || context.title || context.context)) {
+  if (banner && (safeContext.caseName || safeContext.title || safeContext.context)) {
     banner.hidden = false;
     if (bannerTitle) {
-      bannerTitle.textContent = context.caseName
-        ? `Contexto cargado: ${context.caseName}`
-        : context.title || 'Contexto de solicitud cargado';
+      bannerTitle.textContent = safeContext.caseName
+        ? `Contexto cargado: ${safeContext.caseName}`
+        : safeContext.title || 'Contexto de solicitud cargado';
     }
     if (bannerCopy) {
-      bannerCopy.textContent = context.context || 'Usaremos este contexto para personalizar la revisión inicial.';
+      bannerCopy.textContent = safeContext.context || 'Usaremos este contexto para personalizar la revisión inicial.';
     }
   }
 }
@@ -977,6 +1505,7 @@ function setupLeadForms() {
   document.querySelectorAll('[data-form-kind="lead"]').forEach(form => {
     clearInvalidOnInput(form);
     bindChoicePills(form);
+    ensureFormSecurityFields(form);
     applyLeadContext(form, queryContext);
 
     form.querySelectorAll('input, select, textarea').forEach(field => {
@@ -988,6 +1517,12 @@ function setupLeadForms() {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       markFormStarted(form);
+
+      const guardMessage = getFormGuardMessage(form);
+      if (guardMessage) {
+        showToast(guardMessage, 'danger');
+        return;
+      }
 
       if (!validateForm(form)) {
         showToast('Completa los campos obligatorios para que podamos revisar tu caso.', 'danger');
@@ -1006,8 +1541,6 @@ function setupLeadForms() {
       const detectedDomain = getDomainFromEmail(email);
       const timestamp = getTimestampCL();
       const origin = (formData.get('origen_cta') || '').trim();
-      const caseInterest = (formData.get('caso_interes') || '').trim();
-      const demoContext = (formData.get('demo_contexto') || '').trim();
       const leadScore = calcLeadScore(formData);
       const leadLabel = scoreLabel(leadScore);
       const whatsapp = (formData.get('whatsapp') || '').replace(/\D/g, '');
@@ -1028,45 +1561,10 @@ function setupLeadForms() {
         `Lead 42NT - ${sanitizeForSubject(formData.get('necesidad')) || 'sin necesidad'} - ${sanitizeForSubject(cargoRol) || 'sin rol'} - ${sanitizeForSubject(empresa) || 'sin empresa'}`
       );
 
-      const sheetsPayload = {
-        record_type: 'lead',
-        sheet_name: 'Solicitud 42NT',
-        timestamp,
-        pagina: window.location.pathname,
-        nombre,
-        cargo_rol: cargoRol,
-        empresa,
-        empresa_detectada: detectedDomain,
-        nombre_cargo: `${nombre}${cargoRol ? ' — ' + cargoRol : ''}`,
-        email,
-        whatsapp,
-        industria: formData.get('industria') || '',
-        tamano_empresa: formData.get('tamano_empresa') || '',
-        necesidad: formData.get('necesidad') || '',
-        fuente_datos: formData.get('fuente_datos') || '',
-        numero_fuentes: formData.get('numero_fuentes') || '',
-        urgencia: formData.get('urgency') || '',
-        descripcion: formData.get('descripcion') || '',
-        origen_cta: origin,
-        caso_interes: caseInterest,
-        demo_contexto: demoContext,
-        form_inicio_ts: formData.get('form_inicio_ts') || '',
-        form_inicio_origen: formData.get('form_inicio_origen') || '',
-        lead_score: leadScore,
-        lead_label: leadLabel,
-        utm_source: leadSource.source,
-        utm_medium: leadSource.medium,
-        utm_campaign: leadSource.campaign,
-        referrer: leadSource.referrer,
-        user_agent: navigator.userAgent,
-      };
-
       try {
         await sendToFormspree(formData);
-        sendToGoogleSheets(sheetsPayload).catch(error => console.warn('No se pudo registrar en Google Sheets.', error));
 
-        form.hidden = true;
-        form.parentElement?.querySelector('[data-form-success]')?.removeAttribute('hidden');
+        revealSuccessState(form);
 
         trackUiEvent('form_submit_success', {
           form_kind: 'lead',
@@ -1085,24 +1583,27 @@ function setupLeadForms() {
           necesidad: formData.get('necesidad') || '',
         });
 
-        const message = encodeURIComponent(
-          `Hola 42NT, soy ${nombre || 'un prospecto'}${cargoRol ? `, ${cargoRol}` : ''}${empresa ? ` de ${empresa}` : ''}. Necesito ayuda con: ${formData.get('necesidad') || 'evaluación inicial'}.`
-        );
-        showToast(
-          `No pudimos completar el envío. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Escríbenos por WhatsApp</a> y seguimos de inmediato.`,
-          'danger'
-        );
+        const message = `Hola 42NT, soy ${nombre || 'un prospecto'}${cargoRol ? `, ${cargoRol}` : ''}${empresa ? ` de ${empresa}` : ''}. Necesito ayuda con: ${formData.get('necesidad') || 'evaluación inicial'}.`;
+        showToast('No pudimos completar el envío.', 'danger', {
+          action: {
+            href: buildWhatsappUrl(message),
+            label: 'Escríbenos por WhatsApp',
+            target: '_blank',
+            rel: 'noopener',
+          },
+          suffix: ' y seguimos de inmediato.',
+        });
       } finally {
         setButtonLoading(submitButton, false);
       }
     });
   });
 }
-
 function setupSupportForms() {
   document.querySelectorAll('[data-form-kind="support"]').forEach(form => {
     clearInvalidOnInput(form);
     bindChoicePills(form);
+    ensureFormSecurityFields(form);
 
     form.querySelectorAll('input, select, textarea').forEach(field => {
       field.addEventListener('focus', () => markFormStarted(form), { passive: true });
@@ -1113,6 +1614,12 @@ function setupSupportForms() {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       markFormStarted(form);
+
+      const guardMessage = getFormGuardMessage(form);
+      if (guardMessage) {
+        showToast(guardMessage, 'danger');
+        return;
+      }
 
       if (!validateForm(form)) {
         showToast('Completa los datos mínimos para que soporte pueda priorizar tu solicitud.', 'danger');
@@ -1145,37 +1652,10 @@ function setupSupportForms() {
         `Soporte 42NT — ${sanitizeForSubject(tipoSoporte) || 'sin tipo'} — ${sanitizeForSubject(empresa) || 'sin empresa'} — ${sanitizeForSubject(urgencia) || 'sin urgencia'}`
       );
 
-      const sheetsPayload = {
-        record_type: 'support',
-        sheet_name: 'Soporte 42NT',
-        timestamp,
-        pagina: window.location.pathname,
-        nombre,
-        empresa,
-        email: formData.get('email') || '',
-        whatsapp,
-        cliente_status: formData.get('cliente_status') || '',
-        proyecto: formData.get('proyecto') || '',
-        tipo_soporte: tipoSoporte,
-        impacto: formData.get('impacto') || '',
-        urgency: urgencia,
-        descripcion: formData.get('descripcion') || '',
-        origen_cta: origin,
-        form_inicio_ts: formData.get('form_inicio_ts') || '',
-        form_inicio_origen: formData.get('form_inicio_origen') || '',
-        utm_source: leadSource.source,
-        utm_medium: leadSource.medium,
-        utm_campaign: leadSource.campaign,
-        referrer: leadSource.referrer,
-        user_agent: navigator.userAgent,
-      };
-
       try {
         await sendToFormspree(formData);
-        sendToGoogleSheets(sheetsPayload).catch(error => console.warn('No se pudo registrar soporte en Google Sheets.', error));
 
-        form.hidden = true;
-        form.parentElement?.querySelector('[data-form-success]')?.removeAttribute('hidden');
+        revealSuccessState(form);
 
         trackUiEvent('form_submit_success', {
           form_kind: 'support',
@@ -1186,20 +1666,22 @@ function setupSupportForms() {
         showToast('Solicitud de soporte recibida. Revisaremos prioridad, impacto y siguiente paso dentro del horario hábil.', 'success');
       } catch (error) {
         console.error('Error al enviar soporte:', error);
-        const message = encodeURIComponent(
-          `Hola 42NT, necesito soporte para ${empresa || 'mi proyecto'}. Tipo: ${tipoSoporte || 'soporte general'}. Urgencia: ${urgencia || 'sin definir'}.`
-        );
-        showToast(
-          `No pudimos completar el envío. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Habla con soporte por WhatsApp</a>.`,
-          'danger'
-        );
+        const message = `Hola 42NT, necesito soporte para ${empresa || 'mi proyecto'}. Tipo: ${tipoSoporte || 'soporte general'}. Urgencia: ${urgencia || 'sin definir'}.`;
+        showToast('No pudimos completar el envío.', 'danger', {
+          action: {
+            href: buildWhatsappUrl(message),
+            label: 'Habla con soporte por WhatsApp',
+            target: '_blank',
+            rel: 'noopener',
+          },
+          suffix: '.',
+        });
       } finally {
         setButtonLoading(submitButton, false);
       }
     });
   });
 }
-
 function setupLeadTriggers() {
   document.querySelectorAll('[data-select-necesidad]').forEach(trigger => {
     trigger.addEventListener('click', () => {
@@ -1222,6 +1704,10 @@ function setupLeadTriggers() {
     });
   });
 }
+
+/* ============================================================
+   Filters / packages
+   ============================================================ */
 
 function setupCaseFilters() {
   const context = getLeadContextFromQuery();
@@ -1297,6 +1783,47 @@ function setupPackageFocus() {
   }
 }
 
+/* ============================================================
+   Charts / demo
+   ============================================================ */
+
+function getExecutiveDemoPalette() {
+  const isDarkTheme = getActiveTheme() === CONFIG.theme.dark;
+  const brandLink = getCssVar('--brand-link') || '#4c9dff';
+  const brandButtonStrong = getCssVar('--brand-button-strong') || '#17498a';
+  const warning = getCssVar('--warning') || '#f59e0b';
+
+  return {
+    barBackground: isDarkTheme ? rgbaFromHex(brandLink, 0.42) : rgbaFromHex(brandButtonStrong, 0.76),
+    barBorder: isDarkTheme ? rgbaFromHex(brandLink, 0.9) : rgbaFromHex(brandButtonStrong, 0.98),
+    lineBorder: rgbaFromHex(warning, isDarkTheme ? 0.94 : 0.98),
+    lineBackground: rgbaFromHex(warning, isDarkTheme ? 0.18 : 0.14),
+    tickColor: 'rgba(216,227,240,0.72)',
+    gridColor: isDarkTheme ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+    borderColor: isDarkTheme ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.14)',
+    tooltipBackground: isDarkTheme ? 'rgba(12,15,20,0.96)' : 'rgba(8,18,31,0.94)',
+    tooltipBorder: rgbaFromHex(brandLink, isDarkTheme ? 0.24 : 0.18),
+  };
+}
+
+function applyExecutiveDemoChartTheme(chart) {
+  if (!chart) return;
+
+  const palette = getExecutiveDemoPalette();
+  chart.data.datasets[0].backgroundColor = palette.barBackground;
+  chart.data.datasets[0].borderColor = palette.barBorder;
+  chart.data.datasets[1].borderColor = palette.lineBorder;
+  chart.data.datasets[1].backgroundColor = palette.lineBackground;
+  chart.options.plugins.tooltip.backgroundColor = palette.tooltipBackground;
+  chart.options.plugins.tooltip.borderColor = palette.tooltipBorder;
+  chart.options.scales.x.border.color = palette.borderColor;
+  chart.options.scales.y.border.color = palette.borderColor;
+  chart.options.scales.y.grid.color = palette.gridColor;
+  chart.options.scales.x.ticks.color = palette.tickColor;
+  chart.options.scales.y.ticks.color = palette.tickColor;
+  chart.update('none');
+}
+
 function initExecutiveDemoDashboard() {
   const canvas = document.getElementById('demo-dashboard-canvas');
   const skeletonEl = document.getElementById('demo-chart-skeleton');
@@ -1304,7 +1831,10 @@ function initExecutiveDemoDashboard() {
   const updatedEl = document.getElementById('demo-updated-at');
 
   if (!canvas || !skeletonEl || !kpiGrid || typeof Chart === 'undefined') return;
-  if (canvas.dataset.chartReady === 'true') return;
+  if (canvas.dataset.chartReady === 'true') {
+    applyExecutiveDemoChartTheme(executiveDemoChart);
+    return;
+  }
 
   canvas.dataset.chartReady = 'true';
 
@@ -1320,9 +1850,7 @@ function initExecutiveDemoDashboard() {
   const baseSales = [];
   const labels = [];
 
-  const formatClp = value =>
-    '$' + value.toLocaleString('es-CL', { maximumFractionDigits: 0 });
-
+  const formatClp = value => '$' + value.toLocaleString('es-CL', { maximumFractionDigits: 0 });
   const formatPercent = value =>
     value.toLocaleString('es-CL', {
       minimumFractionDigits: 1,
@@ -1358,18 +1886,16 @@ function initExecutiveDemoDashboard() {
 
   const goalFactor = monthlyGoalTarget / baseGoals.reduce((acc, value) => acc + value, 0);
   const salesFactor = monthlySalesTarget / baseSales.reduce((acc, value) => acc + value, 0);
-
   const goals = baseGoals.map(value => Math.round(value * goalFactor));
   const sales = baseSales.map(value => Math.round(value * salesFactor));
 
-  const updatedDate = today.toLocaleDateString('es-CL', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-
   if (updatedEl) {
-    updatedEl.textContent = `Dataset demo 42NT - Actualizacion simulada cada hora - ${updatedDate}`;
+    const updatedDate = today.toLocaleDateString('es-CL', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+    updatedEl.textContent = `Dataset demo 42NT - Actualización simulada cada hora - ${updatedDate}`;
   }
 
   const kpis = [
@@ -1387,36 +1913,30 @@ function initExecutiveDemoDashboard() {
     },
     {
       label: 'Cobertura de stock',
-      value: `${stockCoverageDays} dias`,
-      meta: 'Objetivo: 18 dias',
+      value: `${stockCoverageDays} días`,
+      meta: 'Objetivo: 18 días',
       tone: 'neutral',
     },
     {
       label: 'Pedidos pendientes',
       value: pendingOrders.toLocaleString('es-CL'),
-      meta: 'Priorizacion operativa del dia',
+      meta: 'Priorización operativa del día',
       tone: 'down',
     },
     {
-      label: 'Variacion mensual',
+      label: 'Variación mensual',
       value: `+${formatPercent(((monthlySalesTarget - previousMonthSales) / previousMonthSales) * 100)}`,
       meta: 'Mejor ritmo que el mes anterior',
       tone: 'up',
     },
   ];
 
-  kpiGrid.innerHTML = kpis.map(item => `
-    <div class="demo-kpi-card">
-      <span class="demo-kpi-label">${item.label}</span>
-      <strong class="demo-kpi-value">${item.value}</strong>
-      <span class="demo-kpi-meta ${item.tone}">${item.meta}</span>
-    </div>
-  `).join('');
+  kpiGrid.replaceChildren(...kpis.map(createDemoKpiCard));
 
   skeletonEl.style.display = 'none';
   canvas.style.display = 'block';
 
-  new Chart(canvas.getContext('2d'), {
+  executiveDemoChart = new Chart(canvas.getContext('2d'), {
     data: {
       labels,
       datasets: [
@@ -1424,8 +1944,6 @@ function initExecutiveDemoDashboard() {
           type: 'bar',
           label: 'Ventas diarias',
           data: sales,
-          backgroundColor: 'rgba(0,187,255,0.52)',
-          borderColor: 'rgba(0,187,255,0.85)',
           borderWidth: 1,
           borderRadius: 8,
           maxBarThickness: 18,
@@ -1434,11 +1952,9 @@ function initExecutiveDemoDashboard() {
           type: 'line',
           label: 'Meta diaria',
           data: goals,
-          borderColor: '#ff8a65',
-          backgroundColor: 'rgba(255,138,101,0.18)',
-          borderWidth: 2.5,
+          borderWidth: 3,
           pointRadius: 0,
-          pointHoverRadius: 4,
+          pointHoverRadius: 5,
           tension: 0.32,
         },
       ],
@@ -1453,8 +1969,6 @@ function initExecutiveDemoDashboard() {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(8,18,31,0.94)',
-          borderColor: 'rgba(0,187,255,0.16)',
           borderWidth: 1,
           displayColors: true,
           callbacks: {
@@ -1468,7 +1982,6 @@ function initExecutiveDemoDashboard() {
             display: false,
           },
           ticks: {
-            color: 'rgba(180,210,255,0.68)',
             font: { size: 11 },
             maxRotation: 0,
             autoSkip: true,
@@ -1479,7 +1992,6 @@ function initExecutiveDemoDashboard() {
         y: {
           grid: { color: 'rgba(255,255,255,0.06)' },
           ticks: {
-            color: 'rgba(180,210,255,0.68)',
             font: { size: 11 },
             callback: value =>
               `${(value / 1000000).toLocaleString('es-CL', {
@@ -1496,6 +2008,8 @@ function initExecutiveDemoDashboard() {
       },
     },
   });
+
+  applyExecutiveDemoChartTheme(executiveDemoChart);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1506,6 +2020,7 @@ document.addEventListener('DOMContentLoaded', () => {
   skipLink.textContent = 'Saltar al contenido';
   document.body.prepend(skipLink);
 
+  initTheme();
   initScrollBar();
   initNavHeight();
   initNavbar();
@@ -1514,6 +2029,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavDropdowns();
   initAos();
   initParallax();
+  applyFieldConstraints();
+  enhanceSharedAccessibility();
   setupTrackedLinks();
   setupScrollTracking();
   setupSmoothScroll();
@@ -1527,4 +2044,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCaseFilters();
   setupPackageFocus();
   initExecutiveDemoDashboard();
+
+  window.addEventListener('themechange', () => {
+    applyExecutiveDemoChartTheme(executiveDemoChart);
+  });
 });
+

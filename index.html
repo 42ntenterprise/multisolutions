@@ -1,16 +1,19 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'sha256-2w/cjAm0X0x2JTiKNHBwaFuRDp4KPTwXEhYdQ6WyXVU=' 'sha256-4JqogDR/qU7RlFw23API9YRarvlZcQHPWVcGcfmkSCQ=' 'sha256-CARkHkuJIv6o0+Zl/EROJcNTR6R4dCMdJPKrnx9ouW4=' 'sha256-gjMp85S6n8NK+Tvkk36+BRVqtLKjHqAcRXBs/ceuO4o=' 'sha256-N2ZMZvFSNcZn6CxhFYHjxZx5Rj18mNChjkVy/1DKSzM=' 'sha256-nmtyeEwARCt5Whpo7yF98DFYHFiK3OTOh6bdy5GAams=' 'sha256-pkCKN+SBvoBoZjVO7l+XOlTrnTVuKeQ7F9opH2qsJRk=' 'sha256-qk8kDbGmU+F4Dhh1oHmJ3y0jiP/hZ2F0hLpVTwlskBU=' 'sha256-T+X7t3xToZw94KajuCz5punqoaYsRmarryztILwkOLA=' 'sha256-VRe02JaBAdAqorfuizplJyLdZMpiXL96ZrtiQ2sLzs8='; connect-src 'self' https://formspree.io; form-action 'self' https://formspree.io; frame-src 'none'; manifest-src 'self'; media-src 'none'; upgrade-insecure-requests" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>42NT Solutions</title>
   <meta name="description" content="42NT Solutions ahora opera como un sitio multip&aacute;gina orientado por intenci&oacute;n de usuario." />
   <meta name="robots" content="noindex, follow" />
   <link rel="canonical" href="https://42ntenterprise.github.io/multisolutions/inicio/" />
+  <meta name="theme-color" content="#f7f7f4" />
+  <meta name="color-scheme" content="light dark" />
+  <script src="./theme-init.js?v=20260404-security-review-1"></script>
   <meta http-equiv="refresh" content="0; url=./inicio/" />
-  <script>
-    window.location.replace('./inicio/');
-  </script>
+  <script src="./redirect-to-inicio.js?v=20260404-security-review-1"></script>
   <style>
     body {
       margin: 0;
@@ -18,20 +21,20 @@
       display: grid;
       place-items: center;
       padding: 1.5rem;
-      font-family: "Segoe UI", Arial, sans-serif;
+      font-family: "Sora", "Segoe UI", Arial, sans-serif;
       background:
-        linear-gradient(180deg, rgba(4, 17, 29, 0.34) 0%, rgba(7, 27, 42, 0.2) 38%, rgba(7, 27, 42, 0.38) 100%),
+        linear-gradient(180deg, rgba(11, 31, 51, 0.24) 0%, rgba(247, 247, 244, 0.86) 100%),
         url("./images/fondo 42NT Solutions.webp") center center / cover no-repeat fixed,
-        #071b2a;
-      color: #f3f7fb;
+        #f7f7f4;
+      color: #0b1f33;
     }
     .redirect-shell {
       width: min(100%, 32rem);
       padding: 1.5rem 1.7rem;
-      border: 1px solid rgba(120, 212, 255, 0.22);
+      border: 1px solid rgba(21, 49, 74, 0.12);
       border-radius: 1.5rem;
-      background: rgba(7, 27, 42, 0.78);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 24px 60px rgba(11, 31, 51, 0.12);
       text-align: center;
       backdrop-filter: blur(12px);
     }
@@ -40,7 +43,7 @@
       line-height: 1.6;
     }
     a {
-      color: #78d4ff;
+      color: #1e5aa8;
     }
   </style>
 </head>
@@ -50,3 +53,4 @@
   </main>
 </body>
 </html>
+
