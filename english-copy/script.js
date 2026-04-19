@@ -1,6 +1,30 @@
-const CONFIG = {
+﻿const CONFIG = {
   FORMSPREE_URL: 'https://formspree.io/f/xdawnkgn',
-  GOOGLE_SHEETS_URL: 'https://script.google.com/macros/s/AKfycbypnjXsB-tTnvyWjz1ktKSeZiGN1XKBVr2nbCWoMNiX-Hhj3_hhKZg8GbpgpLu4Zmo0dA/exec',
+  theme: {
+    storageKey: '42nt-theme',
+    light: 'light',
+    dark: 'dark',
+    metaColors: {
+      light: '#f7f7f4',
+      dark: '#121417',
+    },
+  },
+  forms: {
+    minSubmitAgeMs: 1500,
+    hiddenStartedAtName: 'form_started_epoch_ms',
+    honeypotName: 'website',
+    fieldLimits: {
+      nombre: { maxlength: 120, minlength: 2 },
+      empresa: { maxlength: 160, minlength: 2 },
+      email: { maxlength: 254 },
+      proyecto: { maxlength: 160 },
+      descripcion: { maxlength: 500, minlength: 20 },
+      origen_cta: { maxlength: 120 },
+      caso_interes: { maxlength: 120 },
+      demo_contexto: { maxlength: 240 },
+      form_inicio_origen: { maxlength: 120 },
+    },
+  },
 };
 
 const NAV_SECTIONS = {
@@ -62,6 +86,260 @@ function buildNavSectionHref(baseHref, sectionId, currentSlug, targetSlug) {
   return `${baseHref}#${sectionId}`;
 }
 
+function buildWhatsappUrl(message = '') {
+  if (!message) return 'https://wa.me/56932516492';
+  return `https://wa.me/56932516492?text=${encodeURIComponent(message)}`;
+}
+
+function sanitizeContextValue(value, maxLength = 240) {
+  return String(value || '')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function applyFieldConstraints(scope = document) {
+  Object.entries(CONFIG.forms.fieldLimits).forEach(([name, rules]) => {
+    scope.querySelectorAll(`[name="${name}"]`).forEach(field => {
+      if (rules.maxlength && !field.hasAttribute('maxlength')) {
+        field.setAttribute('maxlength', String(rules.maxlength));
+      }
+
+      if (rules.minlength && !field.hasAttribute('minlength') && field.type !== 'hidden') {
+        field.setAttribute('minlength', String(rules.minlength));
+      }
+    });
+  });
+}
+
+function normalizeFormFields(form) {
+  form.querySelectorAll('input, select, textarea').forEach(field => {
+    if (typeof field.value !== 'string') return;
+    if (field.type === 'hidden' || field.type === 'checkbox' || field.type === 'radio') return;
+    field.value = field.value.trim();
+  });
+}
+
+function createHiddenField(form, name, value = '') {
+  const input = document.createElement('input');
+  input.type = 'hidden';
+  input.name = name;
+  input.value = value;
+  form.prepend(input);
+  return input;
+}
+
+function ensureFormSecurityFields(form) {
+  if (!form) return;
+
+  let startedAt = form.querySelector(`[name="${CONFIG.forms.hiddenStartedAtName}"]`);
+  if (!startedAt) {
+    startedAt = createHiddenField(form, CONFIG.forms.hiddenStartedAtName, String(Date.now()));
+  } else if (!startedAt.value) {
+    startedAt.value = String(Date.now());
+  }
+
+  if (!form.querySelector('[data-honeypot-field]')) {
+    const wrapper = document.createElement('div');
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+
+    wrapper.setAttribute('data-honeypot-field', 'true');
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '-10000px';
+    wrapper.style.width = '1px';
+    wrapper.style.height = '1px';
+    wrapper.style.overflow = 'hidden';
+
+    label.textContent = 'Do not complete';
+    input.type = 'text';
+    input.name = CONFIG.forms.honeypotName;
+    input.tabIndex = -1;
+    input.autocomplete = 'off';
+
+    wrapper.append(label, input);
+    form.appendChild(wrapper);
+  }
+}
+
+function getFormGuardMessage(form) {
+  ensureFormSecurityFields(form);
+
+  const honeypot = form.querySelector(`[name="${CONFIG.forms.honeypotName}"]`);
+  if (honeypot && honeypot.value.trim()) {
+    return 'We could not validate the form. Reload the page and try again.';
+  }
+
+  const startedAt = Number(form.querySelector(`[name="${CONFIG.forms.hiddenStartedAtName}"]`)?.value || 0);
+  if (startedAt && Date.now() - startedAt < CONFIG.forms.minSubmitAgeMs) {
+    return 'Please wait a second for the form check to complete and submit again.';
+  }
+
+  return '';
+}
+
+function ensureThemeMetaTag() {
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) return meta;
+
+  meta = document.createElement('meta');
+  meta.setAttribute('name', 'theme-color');
+  document.head.appendChild(meta);
+  return meta;
+}
+
+function getStoredTheme() {
+  try {
+    const theme = window.localStorage.getItem(CONFIG.theme.storageKey);
+    return theme === CONFIG.theme.dark || theme === CONFIG.theme.light ? theme : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? CONFIG.theme.dark
+    : CONFIG.theme.light;
+}
+
+function getActiveTheme() {
+  return document.documentElement.getAttribute('data-theme') === CONFIG.theme.dark
+    ? CONFIG.theme.dark
+    : CONFIG.theme.light;
+}
+
+function resolveThemePreference() {
+  return getStoredTheme() || document.documentElement.getAttribute('data-theme') || getSystemTheme();
+}
+
+function syncThemeColorMeta(theme) {
+  const meta = ensureThemeMetaTag();
+  meta.setAttribute('content', CONFIG.theme.metaColors[theme] || CONFIG.theme.metaColors.light);
+}
+
+function createThemeToggleItem() {
+  const item = document.createElement('li');
+  item.className = 'nav-item nav-item-theme';
+
+  const button = document.createElement('button');
+  button.className = 'theme-toggle';
+  button.type = 'button';
+  button.dataset.themeToggle = '';
+  button.setAttribute('aria-pressed', 'false');
+
+  const iconWrapper = document.createElement('span');
+  iconWrapper.className = 'theme-toggle-icon';
+  iconWrapper.setAttribute('aria-hidden', 'true');
+
+  const icon = document.createElement('i');
+  icon.className = 'bi bi-moon-stars-fill';
+  iconWrapper.appendChild(icon);
+
+  const copyWrapper = document.createElement('span');
+  copyWrapper.className = 'theme-toggle-copy';
+
+  const label = document.createElement('span');
+  label.className = 'theme-toggle-label';
+  label.textContent = 'Theme';
+
+  const state = document.createElement('span');
+  state.className = 'theme-toggle-state';
+  state.textContent = 'Light';
+
+  copyWrapper.append(label, state);
+  button.append(iconWrapper, copyWrapper);
+  item.appendChild(button);
+
+  return item;
+}
+
+function ensureThemeToggle() {
+  document.querySelectorAll('#mainNav .navbar-nav').forEach(navList => {
+    if (navList.querySelector('.nav-item-theme')) return;
+
+    const toggleItem = createThemeToggleItem();
+    const languageItem = navList.querySelector('.nav-item-language');
+    if (languageItem) {
+      languageItem.before(toggleItem);
+      return;
+    }
+
+    navList.appendChild(toggleItem);
+  });
+}
+
+function updateThemeToggleUi(theme) {
+  const isDark = theme === CONFIG.theme.dark;
+
+  document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+    const icon = button.querySelector('.theme-toggle-icon i');
+    const state = button.querySelector('.theme-toggle-state');
+
+    button.setAttribute('aria-pressed', String(isDark));
+    button.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    button.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+
+    if (state) state.textContent = isDark ? 'Dark' : 'Light';
+
+    if (icon) {
+      icon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    }
+  });
+}
+
+function applyTheme(theme, { persist = false } = {}) {
+  const resolvedTheme = theme === CONFIG.theme.dark ? CONFIG.theme.dark : CONFIG.theme.light;
+
+  document.documentElement.setAttribute('data-theme', resolvedTheme);
+  document.documentElement.style.colorScheme = resolvedTheme;
+  syncThemeColorMeta(resolvedTheme);
+  updateThemeToggleUi(resolvedTheme);
+
+  if (persist) {
+    try {
+      window.localStorage.setItem(CONFIG.theme.storageKey, resolvedTheme);
+    } catch (error) {
+      console.warn('Could not store the theme preference.', error);
+    }
+  }
+}
+
+function toggleTheme() {
+  const nextTheme = getActiveTheme() === CONFIG.theme.dark ? CONFIG.theme.light : CONFIG.theme.dark;
+  applyTheme(nextTheme, { persist: true });
+}
+
+function bindThemeToggle() {
+  document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+    if (button.dataset.themeToggleBound === 'true') return;
+    button.dataset.themeToggleBound = 'true';
+
+    button.addEventListener('click', () => toggleTheme());
+  });
+}
+
+function initTheme() {
+  ensureThemeMetaTag();
+  ensureThemeToggle();
+  applyTheme(resolveThemePreference());
+  bindThemeToggle();
+
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const syncWithSystem = event => {
+    if (getStoredTheme()) return;
+    applyTheme(event.matches ? CONFIG.theme.dark : CONFIG.theme.light);
+  };
+
+  if (typeof mediaQuery.addEventListener === 'function') {
+    mediaQuery.addEventListener('change', syncWithSystem);
+  } else if (typeof mediaQuery.addListener === 'function') {
+    mediaQuery.addListener(syncWithSystem);
+  }
+}
+
 function syncGlobalNav() {
   const nav = document.getElementById('mainNav');
   if (!nav) return;
@@ -87,15 +365,12 @@ function syncGlobalNav() {
       menu.setAttribute('aria-label', `${menuLabel} submenu`);
     }
 
-    menu.innerHTML = sections.map(section => {
+    const links = sections.map(section => {
       const href = buildNavSectionHref(baseHref, section.id, currentSlug, targetSlug);
-      return `
-        <a class="nav-dropdown-link" href="${href}">
-          <span class="nav-dropdown-link-title">${section.title}</span>
-          <span class="nav-dropdown-link-copy">${section.copy}</span>
-        </a>
-      `;
-    }).join('');
+      return createNavDropdownLink(href, section);
+    });
+
+    menu.replaceChildren(...links);
   });
 }
 
@@ -403,12 +678,29 @@ function ensureToastStack() {
   return stack;
 }
 
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', options = {}) {
   const stack = ensureToastStack();
   const toast = document.createElement('div');
   const mappedType = type === 'error' ? 'danger' : type;
+  const messageWrap = document.createElement('div');
   toast.className = `site-toast site-toast--${mappedType}`;
-  toast.innerHTML = message;
+  messageWrap.textContent = message;
+
+  if (options.action?.href && options.action?.label) {
+    messageWrap.appendChild(document.createTextNode(' '));
+    const action = document.createElement('a');
+    action.href = options.action.href;
+    action.textContent = options.action.label;
+    if (options.action.target) action.target = options.action.target;
+    if (options.action.rel) action.rel = options.action.rel;
+    messageWrap.appendChild(action);
+  }
+
+  if (options.suffix) {
+    messageWrap.appendChild(document.createTextNode(options.suffix));
+  }
+
+  toast.appendChild(messageWrap);
   stack.appendChild(toast);
 
   requestAnimationFrame(() => toast.classList.add('is-visible'));
@@ -484,8 +776,8 @@ function calcLeadScore(formData) {
 }
 
 function scoreLabel(score) {
-  if (score >= 70) return 'CALIENTE';
-  if (score >= 40) return 'TIBIO';
+  if (score >= 70) return 'HOT';
+  if (score >= 40) return 'WARM';
   return 'COLD';
 }
 
@@ -500,24 +792,6 @@ function sendToFormspree(formData) {
       throw new Error(error.error || `Formspree error ${response.status}`);
     }
     return response.json();
-  });
-}
-
-function sendToGoogleSheets(payload = {}) {
-  const endpoint = (CONFIG.GOOGLE_SHEETS_URL || '').trim();
-  if (!endpoint) return Promise.reject(new Error('Missing GOOGLE_SHEETS_URL configuration.'));
-
-  const body = new URLSearchParams();
-
-  Object.entries(payload).forEach(([key, value]) => {
-    body.append(key, value == null ? '' : String(value));
-  });
-
-  return fetch(endpoint, {
-    method: 'POST',
-    mode: 'no-cors',
-    keepalive: true,
-    body,
   });
 }
 
@@ -536,10 +810,18 @@ function setButtonLoading(button, isLoading) {
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     button.setAttribute('aria-disabled', 'true');
-    button.dataset.originalHtml = button.innerHTML;
+    if (!button.__originalContentNodes) {
+      button.__originalContentNodes = Array.from(button.childNodes).map(node => node.cloneNode(true));
+    }
     button.dataset.originalAriaLabel = button.getAttribute('aria-label') || '';
     button.setAttribute('aria-label', 'Sending form');
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-label="Sending form"></span>Sending...';
+
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner-border spinner-border-sm me-2';
+    spinner.setAttribute('role', 'status');
+    spinner.setAttribute('aria-label', 'Sending form');
+
+    button.replaceChildren(spinner, document.createTextNode('Sending...'));
   } else {
     button.disabled = false;
     button.setAttribute('aria-busy', 'false');
@@ -549,11 +831,36 @@ function setButtonLoading(button, isLoading) {
     } else {
       button.removeAttribute('aria-label');
     }
-    button.innerHTML = button.dataset.originalHtml || button.innerHTML;
+
+    if (button.__originalContentNodes) {
+      button.replaceChildren(...button.__originalContentNodes.map(node => node.cloneNode(true)));
+    }
   }
 }
 
+function createDemoKpiCard(item) {
+  const card = document.createElement('div');
+  card.className = 'demo-kpi-card';
+
+  const label = document.createElement('span');
+  label.className = 'demo-kpi-label';
+  label.textContent = item.label;
+
+  const value = document.createElement('strong');
+  value.className = 'demo-kpi-value';
+  value.textContent = item.value;
+
+  const meta = document.createElement('span');
+  meta.className = `demo-kpi-meta ${item.tone}`;
+  meta.textContent = item.meta;
+
+  card.append(label, value, meta);
+  return card;
+}
+
 function markFormStarted(form, sourceOverride = '') {
+  ensureFormSecurityFields(form);
+
   const startedAt = form.querySelector('[name="form_inicio_ts"]');
   const startedSource = form.querySelector('[name="form_inicio_origen"]');
   const originField = form.querySelector('[name="origen_cta"]');
@@ -577,13 +884,17 @@ function markFormStarted(form, sourceOverride = '') {
 }
 
 function validateForm(form) {
+  normalizeFormFields(form);
+
   let isValid = true;
   let firstInvalid = null;
 
-  form.querySelectorAll('[required]').forEach(field => {
-    const value = typeof field.value === 'string' ? field.value.trim() : field.value;
-    const valid = Boolean(value);
+  form.querySelectorAll('input, select, textarea').forEach(field => {
+    if (!field.willValidate) return;
+
+    const valid = field.checkValidity();
     field.classList.toggle('is-invalid', !valid);
+    field.setAttribute('aria-invalid', String(!valid));
     if (!valid && !firstInvalid) firstInvalid = field;
     if (!valid) isValid = false;
   });
@@ -602,8 +913,14 @@ function validateForm(form) {
 
 function clearInvalidOnInput(form) {
   form.querySelectorAll('.form-control, .form-select, .form-textarea').forEach(field => {
-    field.addEventListener('input', () => field.classList.remove('is-invalid'));
-    field.addEventListener('change', () => field.classList.remove('is-invalid'));
+    field.addEventListener('input', () => {
+      field.classList.remove('is-invalid');
+      field.setAttribute('aria-invalid', 'false');
+    });
+    field.addEventListener('change', () => {
+      field.classList.remove('is-invalid');
+      field.setAttribute('aria-invalid', 'false');
+    });
   });
 }
 
@@ -640,6 +957,15 @@ function getLeadContextFromQuery() {
 function applyLeadContext(form, context) {
   if (!form || !context) return;
 
+  const safeContext = {
+    need: sanitizeContextValue(context.need, 120),
+    industry: sanitizeContextValue(context.industry, 80),
+    caseName: sanitizeContextValue(context.caseName, 120),
+    context: sanitizeContextValue(context.context, 240),
+    origin: sanitizeContextValue(context.origin, 120),
+    title: sanitizeContextValue(context.title, 120),
+  };
+
   const needField = form.querySelector('[name="necesidad"]');
   const industryField = form.querySelector('[name="industria"]');
   const originField = form.querySelector('[name="origen_cta"]');
@@ -649,29 +975,29 @@ function applyLeadContext(form, context) {
   const bannerTitle = banner?.querySelector('[data-form-context-title]');
   const bannerCopy = banner?.querySelector('[data-form-context-copy]');
 
-  if (needField && context.need) {
-    const option = [...needField.options].find(item => item.value === context.need);
-    if (option) needField.value = context.need;
+  if (needField && safeContext.need) {
+    const option = [...needField.options].find(item => item.value === safeContext.need);
+    if (option) needField.value = safeContext.need;
   }
 
-  if (industryField && context.industry) {
-    const option = [...industryField.options].find(item => item.value === context.industry);
-    if (option) industryField.value = context.industry;
+  if (industryField && safeContext.industry) {
+    const option = [...industryField.options].find(item => item.value === safeContext.industry);
+    if (option) industryField.value = safeContext.industry;
   }
 
-  if (originField && context.origin) originField.value = context.origin;
-  if (caseField && context.caseName) caseField.value = context.caseName;
-  if (contextField && context.context) contextField.value = context.context;
+  if (originField && safeContext.origin) originField.value = safeContext.origin;
+  if (caseField && safeContext.caseName) caseField.value = safeContext.caseName;
+  if (contextField && safeContext.context) contextField.value = safeContext.context;
 
-  if (banner && (context.caseName || context.title || context.context)) {
+  if (banner && (safeContext.caseName || safeContext.title || safeContext.context)) {
     banner.hidden = false;
     if (bannerTitle) {
-      bannerTitle.textContent = context.caseName
-        ? `Loaded context: ${context.caseName}`
-        : context.title || 'Request context loaded';
+      bannerTitle.textContent = safeContext.caseName
+        ? `Loaded context: ${safeContext.caseName}`
+        : safeContext.title || 'Request context loaded';
     }
     if (bannerCopy) {
-      bannerCopy.textContent = context.context || 'We will use this context to personalize the initial review.';
+      bannerCopy.textContent = safeContext.context || 'We will use this context to personalize the initial review.';
     }
   }
 }
@@ -861,6 +1187,7 @@ function setupLeadForms() {
   document.querySelectorAll('[data-form-kind="lead"]').forEach(form => {
     clearInvalidOnInput(form);
     bindChoicePills(form);
+    ensureFormSecurityFields(form);
     applyLeadContext(form, queryContext);
 
     form.querySelectorAll('input, select, textarea').forEach(field => {
@@ -872,6 +1199,12 @@ function setupLeadForms() {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       markFormStarted(form);
+
+      const guardMessage = getFormGuardMessage(form);
+      if (guardMessage) {
+        showToast(guardMessage, 'danger');
+        return;
+      }
 
       if (!validateForm(form)) {
         showToast('Complete the required fields so we can review your case.', 'danger');
@@ -890,8 +1223,6 @@ function setupLeadForms() {
       const detectedDomain = getDomainFromEmail(email);
       const timestamp = getTimestampCL();
       const origin = (formData.get('origen_cta') || '').trim();
-      const caseInterest = (formData.get('caso_interes') || '').trim();
-      const demoContext = (formData.get('demo_contexto') || '').trim();
       const leadScore = calcLeadScore(formData);
       const leadLabel = scoreLabel(leadScore);
       const whatsapp = (formData.get('whatsapp') || '').replace(/\D/g, '');
@@ -912,42 +1243,8 @@ function setupLeadForms() {
         `42NT Lead - ${sanitizeForSubject(formData.get('necesidad')) || 'no need'} - ${sanitizeForSubject(cargoRol) || 'no role'} - ${sanitizeForSubject(empresa) || 'no company'}`
       );
 
-      const sheetsPayload = {
-        record_type: 'lead',
-        sheet_name: 'Solicitud 42NT',
-        timestamp,
-        pagina: window.location.pathname,
-        nombre,
-        cargo_rol: cargoRol,
-        empresa,
-        empresa_detectada: detectedDomain,
-        nombre_cargo: `${nombre}${cargoRol ? ' — ' + cargoRol : ''}`,
-        email,
-        whatsapp,
-        industria: formData.get('industria') || '',
-        tamano_empresa: formData.get('tamano_empresa') || '',
-        necesidad: formData.get('necesidad') || '',
-        fuente_datos: formData.get('fuente_datos') || '',
-        numero_fuentes: formData.get('numero_fuentes') || '',
-        urgencia: formData.get('urgency') || '',
-        descripcion: formData.get('descripcion') || '',
-        origen_cta: origin,
-        caso_interes: caseInterest,
-        demo_contexto: demoContext,
-        form_inicio_ts: formData.get('form_inicio_ts') || '',
-        form_inicio_origen: formData.get('form_inicio_origen') || '',
-        lead_score: leadScore,
-        lead_label: leadLabel,
-        utm_source: leadSource.source,
-        utm_medium: leadSource.medium,
-        utm_campaign: leadSource.campaign,
-        referrer: leadSource.referrer,
-        user_agent: navigator.userAgent,
-      };
-
       try {
         await sendToFormspree(formData);
-        sendToGoogleSheets(sheetsPayload).catch(error => console.warn('Could not register in Google Sheets.', error));
 
         form.hidden = true;
         form.parentElement?.querySelector('[data-form-success]')?.removeAttribute('hidden');
@@ -969,24 +1266,27 @@ function setupLeadForms() {
           necesidad: formData.get('necesidad') || '',
         });
 
-        const message = encodeURIComponent(
-          `Hello 42NT, I am ${nombre || 'a prospect'}${cargoRol ? `, ${cargoRol}` : ''}${empresa ? ` from ${empresa}` : ''}. I need help with: ${formData.get('necesidad') || 'initial assessment'}.`
-        );
-        showToast(
-          `We could not complete the submission. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Write to us on WhatsApp</a> and we will continue right away.`,
-          'danger'
-        );
+        const message = `Hello 42NT, I am ${nombre || 'a prospect'}${cargoRol ? `, ${cargoRol}` : ''}${empresa ? ` from ${empresa}` : ''}. I need help with: ${formData.get('necesidad') || 'initial assessment'}.`;
+        showToast('We could not complete the submission.', 'danger', {
+          action: {
+            href: buildWhatsappUrl(message),
+            label: 'Write to us on WhatsApp',
+            target: '_blank',
+            rel: 'noopener',
+          },
+          suffix: ' and we will continue right away.',
+        });
       } finally {
         setButtonLoading(submitButton, false);
       }
     });
   });
 }
-
 function setupSupportForms() {
   document.querySelectorAll('[data-form-kind="support"]').forEach(form => {
     clearInvalidOnInput(form);
     bindChoicePills(form);
+    ensureFormSecurityFields(form);
 
     form.querySelectorAll('input, select, textarea').forEach(field => {
       field.addEventListener('focus', () => markFormStarted(form), { passive: true });
@@ -997,6 +1297,12 @@ function setupSupportForms() {
     form.addEventListener('submit', async event => {
       event.preventDefault();
       markFormStarted(form);
+
+      const guardMessage = getFormGuardMessage(form);
+      if (guardMessage) {
+        showToast(guardMessage, 'danger');
+        return;
+      }
 
       if (!validateForm(form)) {
         showToast('Complete the minimum details so support can prioritize your request.', 'danger');
@@ -1029,34 +1335,8 @@ function setupSupportForms() {
         `42NT Support - ${sanitizeForSubject(tipoSoporte) || 'no type'} - ${sanitizeForSubject(empresa) || 'no company'} - ${sanitizeForSubject(urgencia) || 'no urgency'}`
       );
 
-      const sheetsPayload = {
-        record_type: 'support',
-        sheet_name: 'Soporte 42NT',
-        timestamp,
-        pagina: window.location.pathname,
-        nombre,
-        empresa,
-        email: formData.get('email') || '',
-        whatsapp,
-        cliente_status: formData.get('cliente_status') || '',
-        proyecto: formData.get('proyecto') || '',
-        tipo_soporte: tipoSoporte,
-        impacto: formData.get('impacto') || '',
-        urgency: urgencia,
-        descripcion: formData.get('descripcion') || '',
-        origen_cta: origin,
-        form_inicio_ts: formData.get('form_inicio_ts') || '',
-        form_inicio_origen: formData.get('form_inicio_origen') || '',
-        utm_source: leadSource.source,
-        utm_medium: leadSource.medium,
-        utm_campaign: leadSource.campaign,
-        referrer: leadSource.referrer,
-        user_agent: navigator.userAgent,
-      };
-
       try {
         await sendToFormspree(formData);
-        sendToGoogleSheets(sheetsPayload).catch(error => console.warn('Could not register support in Google Sheets.', error));
 
         form.hidden = true;
         form.parentElement?.querySelector('[data-form-success]')?.removeAttribute('hidden');
@@ -1070,20 +1350,22 @@ function setupSupportForms() {
         showToast('Support request received. We will review priority, impact, and next step during business hours.', 'success');
       } catch (error) {
         console.error('Error sending support request:', error);
-        const message = encodeURIComponent(
-          `Hello 42NT, I need support for ${empresa || 'my project'}. Type: ${tipoSoporte || 'general support'}. Urgency: ${urgencia || 'not defined'}.`
-        );
-        showToast(
-          `We could not complete the submission. <a href="https://wa.me/56932516492?text=${message}" target="_blank" rel="noopener">Talk to support on WhatsApp</a>.`,
-          'danger'
-        );
+        const message = `Hello 42NT, I need support for ${empresa || 'my project'}. Type: ${tipoSoporte || 'general support'}. Urgency: ${urgencia || 'not defined'}.`;
+        showToast('We could not complete the submission.', 'danger', {
+          action: {
+            href: buildWhatsappUrl(message),
+            label: 'Talk to support on WhatsApp',
+            target: '_blank',
+            rel: 'noopener',
+          },
+          suffix: '.',
+        });
       } finally {
         setButtonLoading(submitButton, false);
       }
     });
   });
 }
-
 function setupLeadTriggers() {
   document.querySelectorAll('[data-select-necesidad]').forEach(trigger => {
     trigger.addEventListener('click', () => {
@@ -1289,13 +1571,7 @@ function initExecutiveDemoDashboard() {
     },
   ];
 
-  kpiGrid.innerHTML = kpis.map(item => `
-    <div class="demo-kpi-card">
-      <span class="demo-kpi-label">${item.label}</span>
-      <strong class="demo-kpi-value">${item.value}</strong>
-      <span class="demo-kpi-meta ${item.tone}">${item.meta}</span>
-    </div>
-  `).join('');
+  kpiGrid.replaceChildren(...kpis.map(createDemoKpiCard));
 
   skeletonEl.style.display = 'none';
   canvas.style.display = 'block';
@@ -1387,9 +1663,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const skipLink = document.createElement('a');
   skipLink.href = '#main-content';
   skipLink.className = 'skip-link';
-  skipLink.textContent = 'Saltar al contenido';
+  skipLink.textContent = 'Skip to content';
   document.body.prepend(skipLink);
 
+  initTheme();
   initScrollBar();
   initNavHeight();
   initNavbar();
@@ -1398,6 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavDropdowns();
   initAos();
   initParallax();
+  applyFieldConstraints();
   setupTrackedLinks();
   setupScrollTracking();
   setupSmoothScroll();
@@ -1412,3 +1690,22 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPackageFocus();
   initExecutiveDemoDashboard();
 });
+
+function createNavDropdownLink(href, section) {
+  const link = document.createElement('a');
+  link.className = 'nav-dropdown-link';
+  link.href = href;
+
+  const title = document.createElement('span');
+  title.className = 'nav-dropdown-link-title';
+  title.textContent = section.title;
+
+  const copy = document.createElement('span');
+  copy.className = 'nav-dropdown-link-copy';
+  copy.textContent = section.copy;
+
+  link.append(title, copy);
+  return link;
+}
+
+
